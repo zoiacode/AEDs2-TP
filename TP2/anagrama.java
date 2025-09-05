@@ -1,62 +1,72 @@
-import java.util.Scanner;
+//import java.util.Scanner;
 
 public class anagrama
 {
-    public static boolean stop(String input) {
-        boolean resp = false;
 
-        if (input.length() == 3 && input.charAt(0) == 'F' && input.charAt(1) == 'I' && input.charAt(2) == 'M') 
-        {
-            resp = true;
-        }
-
-        return resp;
-    }
-    public static void main(String[] args)
+    public static boolean stop(String str1)
     {
-        Scanner scanf = new Scanner(System.in);
-        String input = scanf.next();
-        String input2 = scanf.next();
-        String input3 = scanf.next();
+        boolean answer = false;
 
-        while(!stop(input))
+        if (str1. length() == 3 && str1.charAt(0) == 'F' && str1.charAt(1) == 'I' && str1.charAt(2) == 'M') 
         {
-            if (isAnagram(input, input3))
-            {
-                System.out.println("SIM");
-            }
-            else if(!isAnagram(input2, input3))
-            {
-                System.out.println("NÃO");
-            }
+            answer = true;
         }
-
-        input = scanf.nextLine();
-        input2 = scanf.nextLine();
-        input3 = scanf.nextLine();
-
-
-        scanf.close();
+        return answer;
     }
 
-    static boolean isAnagram(String str1, String str2) {
-        if (str1.length() != str2.length()) {
+    public static boolean isAnagrama(String str1, String str2)
+    {
+        str1 = str1.toLowerCase();
+        str2 = str2.toLowerCase();
+
+        int[] counter = new int[256];
+
+        if (str1.length() != str2.length())
+        {
             return false;
         }
 
-        int[] charCount = new int[256];
-
-        for (int i = 0; i < str1.length(); i++) {
-            charCount[str1.charAt(i)]++;
-            charCount[str2.charAt(i)]--;
+        for (int i = 0; i < str1.length(); i++)
+        {
+            counter[str1.charAt(i)]++;
         }
 
-        for (int count : charCount) {
-            if (count != 0) {
+        for(int j = 0; j < str2.length(); j++)
+        {
+            counter[str2.charAt(j)]--;
+        }
+
+        for (int i = 0; i < 256; i++)
+        {
+            if (counter[i] != 0)
+            {
                 return false;
             }
         }
 
         return true;
+    }
+    public static void main(String[] args)
+    {
+        //Scanner scanf = new Scanner(System.in);
+
+        String linha = MyIO.readLine();
+
+        while (!stop(linha))
+        {
+            String[] palavras = linha.split(" - ");
+
+            if (isAnagrama(palavras[0], palavras[1]))
+            {
+                MyIO.println("SIM");
+            }
+            else
+            {
+                MyIO.println("NÃO");
+            }
+            linha = MyIO.readLine();
+            //linha = scanf.nextLine();
+        }
+        //scanf.close(); 
     }
 }
