@@ -10,9 +10,9 @@ public class Game {
     private int estimatedOwners;
     private float price;
     private List<String> supportedLanguages;
-    private int metacriticScore; // vazio -> -1
-    private float userScore; // vazio ou tbd -> -1.0
-    private int achievements; // vazio -> 0
+    private int metacriticScore;
+    private float userScore;
+    private int achievements;
     private List<String> publishers;
     private List<String> developers;
     private List<String> categories;
@@ -23,7 +23,14 @@ public class Game {
         return id;
     }
 
-    // ===== Helpers de parsing =====
+    public float getPrice() {
+        return price;
+    }
+
+    public int getEstimatedOwners() {
+        return estimatedOwners;
+    }
+
     private static String cleanQuotes(String s) {
         if (s == null)
             return "";
@@ -136,15 +143,50 @@ public class Game {
 
     private static List<String> parseListBracketed(String s) {
         List<String> out = new ArrayList<>();
-        s = (s == null) ? "" : s.trim();
+        if (s == null)
+            return out;
+        s = s.trim();
         if (s.isEmpty())
             return out;
+
         int l = s.indexOf('['), r = s.lastIndexOf(']');
         String inner = (l != -1 && r != -1 && r > l) ? s.substring(l + 1, r) : s;
-        String[] parts = inner.split(",");
+
+        List<String> parts = new ArrayList<>();
+        StringBuilder cur = new StringBuilder();
+        boolean inQuotes = false;
+        for (int i = 0; i < inner.length(); i++) {
+            char c = inner.charAt(i);
+            if (c == '"') {
+                inQuotes = !inQuotes;
+                continue;
+            }
+            if (c == ',' && !inQuotes) {
+                parts.add(cur.toString());
+                cur.setLength(0);
+            } else {
+                cur.append(c);
+            }
+        }
+        parts.add(cur.toString());
+
         LinkedHashSet<String> uniq = new LinkedHashSet<>();
         for (String p : parts) {
-            String item = cleanQuotes(p);
+            String item = p.trim();
+
+            item = cleanQuotes(item);
+
+            item = item.replace("\"\"", "\"").replace("\\\"", "\"");
+
+            if (item.startsWith("\"") && item.endsWith("\"") && item.length() >= 2) {
+                item = item.substring(1, item.length() - 1).trim();
+            }
+            if (item.startsWith("'") && item.endsWith("'") && item.length() >= 2) {
+                item = item.substring(1, item.length() - 1).trim();
+            }
+
+            item = item.replace("\"", "");
+
             if (!item.isEmpty())
                 uniq.add(item);
         }
@@ -153,21 +195,39 @@ public class Game {
     }
 
     private static List<String> parseListComma(String s) {
+        List<String> out = new ArrayList<>();
         if (s == null)
-            return new ArrayList<>();
+            return out;
         s = s.trim();
         if (s.isEmpty())
-            return new ArrayList<>();
-        if (s.contains("[") && s.contains("]"))
+            return out;
+
+        if (s.contains("[") && s.contains("]")) {
             return parseListBracketed(s);
+        }
+
         String[] parts = s.split(",");
         LinkedHashSet<String> uniq = new LinkedHashSet<>();
         for (String p : parts) {
-            String item = cleanQuotes(p);
+            String item = p.trim();
+
+            item = cleanQuotes(item);
+
+            item = item.replace("\"\"", "\"").replace("\\\"", "\"");
+
+            if (item.startsWith("\"") && item.endsWith("\"") && item.length() >= 2) {
+                item = item.substring(1, item.length() - 1).trim();
+            }
+            if (item.startsWith("'") && item.endsWith("'") && item.length() >= 2) {
+                item = item.substring(1, item.length() - 1).trim();
+            }
+            item = item.replace("\"", "");
+
             if (!item.isEmpty())
                 uniq.add(item);
         }
-        return new ArrayList<>(uniq);
+        out.addAll(uniq);
+        return out;
     }
 
     private static String formatList(List<String> list) {
@@ -225,8 +285,9 @@ public class Game {
 
     private static Map<Integer, Game> loadAllGames(String fileName) throws IOException {
         Map<Integer, Game> map = new HashMap<>();
-        try (BufferedReader br = new BufferedReader(new FileReader(fileName))) {
-            String header = br.readLine(); // cabeçalho (vírgula)
+        try (BufferedReader br = new BufferedReader(
+                new InputStreamReader(new FileInputStream(fileName), java.nio.charset.StandardCharsets.UTF_8))) {
+            String header = br.readLine();
             if (header == null)
                 return map;
 
@@ -248,18 +309,73 @@ public class Game {
                 g.metacriticScore = parseIntOrDefault(f[6], -1);
                 g.userScore = parseUserScore(f[7]);
                 g.achievements = parseIntOrDefault(f[8], 0);
-                g.publishers = parseListComma(f[9]);
-                g.developers = parseListComma(f[10]);
-                g.categories = parseListComma(f[11]);
-
-                g.genres = parseListComma(f[12]);
-                g.tags = parseListComma(f[13]);
+                g.publishers = (f[9].contains("[") ? parseListBracketed(f[9]) : parseListComma(f[9]));
+                g.developers = (f[10].contains("[") ? parseListBracketed(f[10]) : parseListComma(f[10]));
+                g.categories = (f[11].contains("[") ? parseListBracketed(f[11]) : parseListComma(f[11]));
+                g.genres = (f[12].contains("[") ? parseListBracketed(f[12]) : parseListComma(f[12]));
+                g.tags = (f[13].contains("[") ? parseListBracketed(f[13]) : parseListComma(f[13]));
 
                 if (g.id != 0)
                     map.put(g.id, g);
             }
         }
         return map;
+    }
+
+    // heapsort
+    private static long comparacoes = 0;
+    private static long movimentacoes = 0;
+
+    private static int compareGames(Game g1, Game g2) {
+        comparacoes++;
+        if (g1.estimatedOwners < g2.estimatedOwners)
+            return -1;
+        if (g1.estimatedOwners > g2.estimatedOwners)
+            return 1;
+        return Integer.compare(g1.id, g2.id);
+    }
+
+    public static void heapsort(Game[] array) {
+        comparacoes = 0;
+        movimentacoes = 0;
+        int n = array.length;
+
+        for (int i = n / 2 - 1; i >= 0; i--) {
+            heapify(array, n, i);
+        }
+
+        for (int end = n - 1; end > 0; end--) {
+            swap(array, 0, end);
+            heapify(array, end, 0);
+        }
+    }
+
+    private static void heapify(Game[] array, int heapSize, int i) {
+        int largest = i;
+        int left = 2 * i + 1;
+        int right = 2 * i + 2;
+
+        if (left < heapSize && compareGames(array[left], array[largest]) > 0) {
+            largest = left;
+        }
+
+        if (right < heapSize && compareGames(array[right], array[largest]) > 0) {
+            largest = right;
+        }
+
+        if (largest != i) {
+            swap(array, i, largest);
+            heapify(array, heapSize, largest);
+        }
+    }
+
+    private static void swap(Game[] a, int i, int j) {
+        if (i == j)
+            return;
+        Game tmp = a[i];
+        a[i] = a[j];
+        a[j] = tmp;
+        movimentacoes += 3;
     }
 
     // ===== Main =====
@@ -273,6 +389,8 @@ public class Game {
         }
 
         Scanner sc = new Scanner(System.in);
+        List<Game> selectedGames = new ArrayList<>();
+
         while (sc.hasNextLine()) {
             String s = sc.nextLine().trim();
             if (s.equals("FIM"))
@@ -283,11 +401,33 @@ public class Game {
                 int id = Integer.parseInt(s);
                 Game g = byId.get(id);
                 if (g != null) {
-                    System.out.println(g.toJudgeLine());
+                    selectedGames.add(g);
                 }
             } catch (NumberFormatException ignore) {
             }
         }
         sc.close();
+
+        Game[] games = selectedGames.toArray(new Game[0]);
+
+        if (games.length == 0) {
+            return;
+        }
+
+        long startTime = System.nanoTime();
+        heapsort(games);
+        long endTime = System.nanoTime();
+        long tempoExecucao = endTime - startTime;
+
+        for (Game g : games) {
+            System.out.println(g.toJudgeLine());
+        }
+
+        String matricula = "840005";
+        try (PrintWriter writer = new PrintWriter(new FileWriter(matricula + "_mergesort.txt"))) {
+            writer.println(matricula + "\t" + comparacoes + "\t" + movimentacoes + "\t" + tempoExecucao);
+        } catch (IOException e) {
+            System.err.println("Erro ao criar arquivo de log: " + e.getMessage());
+        }
     }
 }
