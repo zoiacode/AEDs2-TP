@@ -1,4 +1,4 @@
-package ProvaAntiga2.Teoricas.A;
+package A;
 
 import java.util.*;
 

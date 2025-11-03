@@ -1,4 +1,3 @@
-package TP5.heapsort;
 
 import java.io.*;
 import java.nio.charset.*;

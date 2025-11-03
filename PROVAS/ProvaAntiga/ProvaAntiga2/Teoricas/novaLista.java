@@ -1,7 +1,3 @@
-package ProvaAntiga2.Teoricas;
-
-package ProvaAntiga2.Teoricas;
-
 class CelulaDupla {
     int elemento;
     CelulaDupla prox, ant;
@@ -62,5 +58,6 @@ public class novaLista {
             }
         }
         vezLista1 = !vezLista1;
+        return headRes;
     }
 }
