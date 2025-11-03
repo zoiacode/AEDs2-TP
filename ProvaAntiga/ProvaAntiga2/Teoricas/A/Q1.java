@@ -1,4 +1,4 @@
-package ProvaAntiga2;
+package ProvaAntiga2.Teoricas.A;
 
 class Lista {
     CelulaLista inicio;

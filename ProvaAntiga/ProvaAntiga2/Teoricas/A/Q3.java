@@ -1,5 +1,4 @@
-package ProvaAntiga2;
-
+package ProvaAntiga2.Teoricas.A;
 public class Q3 {
     public static void main(String[] args) {
     }
