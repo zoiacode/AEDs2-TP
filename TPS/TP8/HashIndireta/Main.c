@@ -7,6 +7,7 @@
 #define MAX_LINE 2048
 #define MAX_NAME 512
 #define MAX_DATE 32
+#define TAM_TAB 21
 
 typedef struct {
     int id;
@@ -19,11 +20,10 @@ typedef struct {
     int achievements;
 } Game;
 
-typedef struct No {
+typedef struct Node {
     Game elemento;
-    struct No *esq, *dir;
-    int altura;
-} No;
+    struct Node *next;
+} Node;
 
 void cleanQuotes(char *s) {
     int len = strlen(s);
@@ -35,11 +35,11 @@ void cleanQuotes(char *s) {
 
 void trim(char *s) {
     char *start = s;
-    while (isspace(*start)) start++;
+    while (isspace((unsigned char)*start)) start++;
     if (start != s) memmove(s, start, strlen(start) + 1);
     
     char *end = s + strlen(s) - 1;
-    while (end > s && isspace(*end)) end--;
+    while (end > s && isspace((unsigned char)*end)) end--;
     *(end + 1) = '\0';
 }
 
@@ -56,7 +56,7 @@ int parseOwners(char *s) {
     char digits[64] = "";
     int idx = 0;
     for (int i = 0; s[i] != '\0' && idx < 63; i++) {
-        if (isdigit(s[i])) digits[idx++] = s[i];
+        if (isdigit((unsigned char)s[i])) digits[idx++] = s[i];
     }
     digits[idx] = '\0';
     if (strlen(digits) == 0) return 0;
@@ -66,21 +66,30 @@ int parseOwners(char *s) {
 float parsePrice(char *s) {
     trim(s);
     cleanQuotes(s);
-    if (strlen(s) == 0 || strcasecmp(s, "Free to Play") == 0) return 0.0f;
+    if (strlen(s) == 0) return 0.0f;
+    char tmp[64];
+    strncpy(tmp, s, 63); tmp[63] = '\0';
+    for (char *p = tmp; *p; p++) *p = tolower((unsigned char)*p);
+    if (strcmp(tmp, "free to play") == 0) return 0.0f;
     
     char clean[64] = "";
     int idx = 0;
     for (int i = 0; s[i] != '\0' && idx < 63; i++) {
-        if (isdigit(s[i]) || s[i] == '.') clean[idx++] = s[i];
+        if (isdigit((unsigned char)s[i]) || s[i] == '.') clean[idx++] = s[i];
     }
     clean[idx] = '\0';
+    if (idx == 0) return 0.0f;
     return atof(clean);
 }
 
 float parseUserScore(char *s) {
     trim(s);
     cleanQuotes(s);
-    if (strlen(s) == 0 || strcasecmp(s, "tbd") == 0) return -1.0f;
+    if (strlen(s) == 0) return -1.0f;
+    char tmp[64];
+    strncpy(tmp, s, 63); tmp[63] = '\0';
+    for (char *p = tmp; *p; p++) *p = tolower((unsigned char)*p);
+    if (strcmp(tmp, "tbd") == 0) return -1.0f;
     return atof(s);
 }
 
@@ -91,19 +100,25 @@ void normalizeDate(char *s, char *out) {
         strcpy(out, "01/01/0001");
         return;
     }
-    if (strlen(s) == 4 && isdigit(s[0])) {
-        sprintf(out, "01/01/%s", s);
-        return;
+    if (strlen(s) == 4) {
+        int ok = 1;
+        for (int i = 0; i < 4; i++) if (!isdigit((unsigned char)s[i])) ok = 0;
+        if (ok) {
+            sprintf(out, "01/01/%s", s);
+            return;
+        }
     }
-    strcpy(out, s);
+    strncpy(out, s, MAX_DATE-1);
+    out[MAX_DATE-1] = '\0';
 }
 
 void splitCSV(char *line, char fields[][MAX_NAME], int *count) {
     *count = 0;
     int inQuotes = 0, bracketLevel = 0, idx = 0;
     char current[MAX_NAME] = "";
+    idx = 0;
     
-    for (int i = 0; line[i] != '\0'; i++) {
+    for (int i = 0; line[i] != '\0' && line[i] != '\n' && line[i] != '\r'; i++) {
         char c = line[i];
         if (c == '"') {
             inQuotes = !inQuotes;
@@ -116,27 +131,30 @@ void splitCSV(char *line, char fields[][MAX_NAME], int *count) {
             current[idx++] = c;
         } else if (c == ',' && !inQuotes && bracketLevel == 0) {
             current[idx] = '\0';
-            strcpy(fields[*count], current);
+            strncpy(fields[*count], current, MAX_NAME-1);
+            fields[*count][MAX_NAME-1] = '\0';
             (*count)++;
             idx = 0;
             current[0] = '\0';
         } else {
-            current[idx++] = c;
+            if (idx < MAX_NAME-1) current[idx++] = c;
         }
     }
     current[idx] = '\0';
-    strcpy(fields[*count], current);
+    strncpy(fields[*count], current, MAX_NAME-1);
+    fields[*count][MAX_NAME-1] = '\0';
     (*count)++;
 }
 
 Game* parseGame(char *line) {
     char fields[20][MAX_NAME];
-    int count;
+    int count = 0;
     splitCSV(line, fields, &count);
     
     if (count < 14) return NULL;
     
     Game *g = (Game*)malloc(sizeof(Game));
+    if (!g) return NULL;
     g->id = parseIntOrDefault(fields[0], 0);
     
     trim(fields[1]);
@@ -159,121 +177,59 @@ Game* parseGame(char *line) {
     return g;
 }
 
+Node* tabela[TAM_TAB];
 
-int altura(No *n) {
-    return (n == NULL) ? 0 : n->altura;
+long comparacoes = 0;
+
+int hash(const char *name) {
+    int soma = 0;
+    for (size_t i = 0; i < strlen(name); i++) soma += (unsigned char)name[i];
+    return soma % TAM_TAB;
 }
 
-int max(int a, int b) {
-    return (a > b) ? a : b;
-}
-
-int getBalance(No *n) {
-    return (n == NULL) ? 0 : altura(n->esq) - altura(n->dir);
-}
-
-No* novoNo(Game g) {
-    No *n = (No*)malloc(sizeof(No));
-    n->elemento = g;
-    n->esq = n->dir = NULL;
-    n->altura = 1;
-    return n;
-}
-
-No* rotateRight(No *y) {
-    No *x = y->esq;
-    No *T2 = x->dir;
-    
-    x->dir = y;
-    y->esq = T2;
-    
-    y->altura = max(altura(y->esq), altura(y->dir)) + 1;
-    x->altura = max(altura(x->esq), altura(x->dir)) + 1;
-    
-    return x;
-}
-
-No* rotateLeft(No *x) {
-    No *y = x->dir;
-    No *T2 = y->esq;
-    
-    y->esq = x;
-    x->dir = T2;
-    
-    x->altura = max(altura(x->esq), altura(x->dir)) + 1;
-    y->altura = max(altura(y->esq), altura(y->dir)) + 1;
-    
-    return y;
-}
-
-No* inserir(No *node, Game g) {
-    if (node == NULL) return novoNo(g);
-    
-    int cmp = strcmp(g.name, node->elemento.name);
-    if (cmp < 0) {
-        node->esq = inserir(node->esq, g);
-    } else if (cmp > 0) {
-        node->dir = inserir(node->dir, g);
+void inserirHashIndirect(Game *g) {
+    if (g == NULL) return;
+    int pos = hash(g->name);
+    Node *novo = (Node*)malloc(sizeof(Node));
+    if (!novo) return;
+    novo->elemento = *g; 
+    novo->next = NULL;
+    if (tabela[pos] == NULL) {
+        tabela[pos] = novo;
     } else {
-        node->elemento = g;
-        return node;
-    }
-    
-    node->altura = 1 + max(altura(node->esq), altura(node->dir));
-    
-    int balance = getBalance(node);
-
-    
-    // Esquerda-Esquerda
-    if (balance > 1 && strcmp(g.name, node->esq->elemento.name) < 0) {
-        return rotateRight(node);
-    }
-    
-    // Direita-Direita
-    if (balance < -1 && strcmp(g.name, node->dir->elemento.name) > 0) {
-        return rotateLeft(node);
-    }
-    
-    // Esquerda-Direita
-    if (balance > 1 && strcmp(g.name, node->esq->elemento.name) > 0) {
-        node->esq = rotateLeft(node->esq);
-        return rotateRight(node);
-    }
-    
-    // Direita-Esquerda
-    if (balance < -1 && strcmp(g.name, node->dir->elemento.name) < 0) {
-        node->dir = rotateRight(node->dir);
-        return rotateLeft(node);
-    }
-    
-    return node;
-}
-
-int comparacoes = 0;
-
-int pesquisar(No *node, char *name, int primeiroPasso) {
-    if (node == NULL) return 0;
-    
-    comparacoes++;
-    int cmp = strcmp(name, node->elemento.name);
-    
-    if (cmp == 0) {
-        return 1;
-    } else if (cmp < 0) {
-        printf(primeiroPasso ? "  esq" : " esq");
-        return pesquisar(node->esq, name, 0);
-    } else {
-        printf(primeiroPasso ? "  dir" : " dir");
-        return pesquisar(node->dir, name, 0);
+        Node *p = tabela[pos];
+        while (p->next != NULL) p = p->next;
+        p->next = novo;
     }
 }
 
-void pesquisarComCaminho(No *raiz, char *name) {
-    comparacoes = 0;
-    printf("%s: raiz", name);
-    int encontrado = pesquisar(raiz, name, 1);
-    printf(encontrado ? " SIM\n" : " NAO\n");
+int pesquisarComImpressao(const char *nome) {
+    int pos = hash(nome);
+    Node *p = tabela[pos];
+    while (p != NULL) {
+        comparacoes++;
+        if (strcmp(p->elemento.name, nome) == 0) {
+            printf("%s:  (Posicao: %d) SIM\n", nome, pos);
+            return 1;
+        }
+        p = p->next;
+    }
+    printf("%s:  (Posicao: %d) NAO\n", nome, pos);
+    return 0;
 }
+
+void liberarTabela() {
+    for (int i = 0; i < TAM_TAB; i++) {
+        Node *p = tabela[i];
+        while (p) {
+            Node *tmp = p->next;
+            free(p);
+            p = tmp;
+        }
+        tabela[i] = NULL;
+    }
+}
+
 
 int main() {
     char csvPath[] = "/tmp/games.csv";
@@ -283,73 +239,73 @@ int main() {
         return 1;
     }
     
-    // Ler CSV e armazenar jogos em array
     Game *allGames[50000];
     int gameCount = 0;
     
     char line[MAX_LINE];
-    fgets(line, MAX_LINE, fp); // pula header
+    if (!fgets(line, MAX_LINE, fp)) {
+        fclose(fp);
+        return 1;
+    }
     
     while (fgets(line, MAX_LINE, fp)) {
         Game *g = parseGame(line);
         if (g != NULL) {
             allGames[gameCount++] = g;
+            if (gameCount >= 50000) break;
         }
     }
     fclose(fp);
     
-    // Criar árvore AVL
-    No *raiz = NULL;
+    for (int i = 0; i < TAM_TAB; i++) tabela[i] = NULL;
     
-    // Ler IDs até FIM
-    char input[256];
+    char input[512];
     while (1) {
-        if (!fgets(input, 256, stdin)) break;
+        if (!fgets(input, sizeof(input), stdin)) break;
         trim(input);
         if (strcmp(input, "FIM") == 0) break;
         if (strlen(input) == 0) continue;
         
         int id = atoi(input);
-        // Buscar game por ID
         for (int i = 0; i < gameCount; i++) {
             if (allGames[i]->id == id) {
-                raiz = inserir(raiz, *allGames[i]);
+                inserirHashIndirect(allGames[i]); 
                 break;
             }
         }
     }
     
-    // Ler nomes até FIM e pesquisar
     clock_t inicio = clock();
     long totalComparacoes = 0;
     
     while (1) {
-        if (!fgets(input, 256, stdin)) break;
+        if (!fgets(input, sizeof(input), stdin)) break;
         trim(input);
         if (strcmp(input, "FIM") == 0) break;
         if (strlen(input) == 0) continue;
-        
-        pesquisarComCaminho(raiz, input);
+    
+        comparacoes = 0;
+        pesquisarComImpressao(input);
         totalComparacoes += comparacoes;
     }
     
     clock_t fim = clock();
-    long tempoExecucao = ((fim - inicio) * 1000000) / CLOCKS_PER_SEC; // em microssegundos
-  
+    long tempoExecucao = ((fim - inicio) * 1000000L) / CLOCKS_PER_SEC; /* microssegundos */
+    
     char matricula[] = "840005";
     char nomeArquivoLog[64];
-    sprintf(nomeArquivoLog, "%s_avl.txt", matricula);
+    sprintf(nomeArquivoLog, "%s_hashIndireta.txt", matricula);
     
     FILE *logFile = fopen(nomeArquivoLog, "w");
     if (logFile) {
         fprintf(logFile, "%s\t%ld\t%ld\n", matricula, totalComparacoes, tempoExecucao);
         fclose(logFile);
+    } else {
+        fprintf(stderr, "Erro ao escrever log\n");
     }
     
-    // Liberar memória
-    for (int i = 0; i < gameCount; i++) {
-        free(allGames[i]);
-    }
+    liberarTabela();
+    for (int i = 0; i < gameCount; i++) free(allGames[i]);
     
     return 0;
 }
