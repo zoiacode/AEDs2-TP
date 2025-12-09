@@ -153,7 +153,7 @@ class DoidonaSemTADsProntas {
 
    public boolean pesquisarLista(int elemento) {
       boolean resp = false;
-      for (Celula i = primeiroListaT2; i != null; i = i.prox) {
+      for (Celula i = primeiroListaT2.prox; i != null; i = i.prox) {
          if (i.elemento == elemento) {
             resp = true;
             i = ultimoListaT2;
